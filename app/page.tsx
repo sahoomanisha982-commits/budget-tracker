@@ -6,6 +6,9 @@ import {
   ArrowUpRight, 
   ArrowDownRight, 
   PlusCircle, 
+  Edit2,
+  XCircle,
+  Save,
   Trash2, 
   TrendingUp, 
   BrainCircuit, 
@@ -19,20 +22,35 @@ import {
   Meh
 } from 'lucide-react';
 
+interface Transaction {
+  id: number;
+  description: string;
+  amount: number;
+  type: string;
+  category: string;
+  date: string;
+}
+
 export default function BusinessCopilot() {
-  // State management
-  const [transactions, setTransactions] = useState([
+  // Base State management
+  const [transactions, setTransactions] = useState<Transaction[]>([
     { id: 1, description: 'Bulk Inventory Restock', amount: 2400, type: 'expense', category: 'Operations', date: '06/01/2026' },
     { id: 2, description: 'Client Retainer Payment', amount: 4500, type: 'income', category: 'Client Revenue', date: '06/02/2026' },
     { id: 3, description: 'Q2 Marketing Campaign', amount: 1200, type: 'expense', category: 'Marketing', date: '06/02/2026' }
   ]);
+  
+  // Form input field elements bindings
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState('expense');
   const [category, setCategory] = useState('Operations');
   const [monthlyTarget, setMonthlyTarget] = useState(10000);
 
-  // New States for Note Requirements
+  // Transaction Edit System Tracking Buffers
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  // States for Note Requirements
   const [feedbackInput, setFeedbackInput] = useState('');
   const [feedbackSentiment, setFeedbackSentiment] = useState({ score: 'Neutral', text: 'No live review scanned yet.', color: 'text-slate-400', icon: 'meh' });
   const [generatedReport, setGeneratedReport] = useState<string | null>(null);
@@ -153,25 +171,75 @@ export default function BusinessCopilot() {
     });
   }, [transactions, netProfit, totalExpense, monthlyTarget]);
 
-  const handleAddTransaction = (e: React.FormEvent) => {
+  // Adjust Category selection when swapping between Income and Expense
+  useEffect(() => {
+    if (type === 'income') {
+      setCategory('Client Revenue');
+    } else {
+      setCategory('Operations');
+    }
+  }, [type]);
+
+  // Trigger Edit Target Mode Configuration
+  const handleEditSelect = (transaction: Transaction) => {
+    setIsEditing(true);
+    setEditingId(transaction.id);
+    setDescription(transaction.description);
+    setAmount(transaction.amount.toString());
+    setType(transaction.type);
+    setCategory(transaction.category);
+  };
+
+  // Reset Form State Elements
+  const resetFormState = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    setDescription('');
+    setAmount('');
+    setType('expense');
+    setCategory('Operations');
+  };
+
+  // Handle Form Submission for both Additions and Updates
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description || !amount || Number(amount) <= 0) return;
 
-    const newTransaction = {
-      id: Date.now(),
-      description,
-      amount: Number(amount),
-      type,
-      category,
-      date: new Date().toLocaleDateString('en-US')
-    };
-
-    setTransactions([newTransaction, ...transactions]);
-    setDescription('');
-    setAmount('');
+    if (isEditing && editingId !== null) {
+      // Execute Edit Update Transformation Routine
+      setTransactions(transactions.map(t => {
+        if (t.id === editingId) {
+          return {
+            ...t,
+            description,
+            amount: Number(amount),
+            type,
+            category
+          };
+        }
+        return t;
+      }));
+      resetFormState();
+    } else {
+      // Execute standard Add Ledger Insertion Protocol
+      const newTransaction: Transaction = {
+        id: Date.now(),
+        description,
+        amount: Number(amount),
+        type,
+        category,
+        date: new Date().toLocaleDateString('en-US')
+      };
+      setTransactions([newTransaction, ...transactions]);
+      setDescription('');
+      setAmount('');
+    }
   };
 
   const handleDeleteTransaction = (id: number) => {
+    if (editingId === id) {
+      resetFormState();
+    }
     setTransactions(transactions.filter(t => t.id !== id));
   };
 
@@ -310,11 +378,23 @@ export default function BusinessCopilot() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Input Form */}
-          <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-md h-fit">
-            <h2 className="text-base font-bold mb-4 flex items-center gap-2 text-white">
-              <PlusCircle className="w-4 h-4 text-emerald-400" /> Log Business Flow
+          <div className={`bg-slate-900 p-6 rounded-xl border shadow-md h-fit transition-all duration-300 ${isEditing ? 'border-amber-500/40 bg-slate-900/90' : 'border-slate-800'}`}>
+            <h2 className="text-base font-bold mb-4 flex items-center justify-between text-white">
+              <span className="flex items-center gap-2">
+                {isEditing ? <Edit2 className="w-4 h-4 text-amber-400" /> : <PlusCircle className="w-4 h-4 text-emerald-400" />}
+                {isEditing ? 'Modify Ledger Entry' : 'Log Business Flow'}
+              </span>
+              {isEditing && (
+                <button 
+                  type="button" 
+                  onClick={resetFormState}
+                  className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-normal bg-slate-950 px-2 py-0.5 rounded border border-slate-800"
+                >
+                  <XCircle className="w-3 h-3" /> Cancel
+                </button>
+              )}
             </h2>
-            <form onSubmit={handleAddTransaction} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Transaction Statement</label>
                 <input 
@@ -375,9 +455,10 @@ export default function BusinessCopilot() {
               </div>
               <button 
                 type="submit" 
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-2.5 rounded-lg text-xs uppercase tracking-wider transition-colors shadow"
+                className={`w-full font-black py-2.5 rounded-lg text-xs uppercase tracking-wider transition-colors shadow flex items-center justify-center gap-1 ${isEditing ? 'bg-amber-500 hover:bg-amber-600 text-slate-950' : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950'}`}
               >
-                Execute Ledger Process
+                {isEditing ? <Save className="w-3.5 h-3.5" /> : null}
+                {isEditing ? 'Save Parameter Alteration' : 'Execute Ledger Process'}
               </button>
             </form>
           </div>
@@ -399,25 +480,47 @@ export default function BusinessCopilot() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/40 text-xs text-slate-300">
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3 font-medium text-white">{transaction.description}</td>
-                      <td className="py-3">
-                        <span className="bg-slate-950 px-2 py-0.5 rounded text-[11px] border border-slate-800">
-                          {transaction.category}
-                        </span>
-                      </td>
-                      <td className="py-3 text-slate-500">{transaction.date}</td>
-                      <td className={`py-3 text-right font-bold ${transaction.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toLocaleString()}
-                      </td>
-                      <td className="py-3 text-center">
-                        <button onClick={() => handleDeleteTransaction(transaction.id)} className="text-slate-600 hover:text-rose-400 p-1">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {transactions.map((transaction) => {
+                    const isRowBeingEdited = editingId === transaction.id;
+                    return (
+                      <tr 
+                        key={transaction.id} 
+                        className={`transition-colors ${isRowBeingEdited ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-slate-800/30'}`}
+                      >
+                        <td className="py-3 font-medium text-white">
+                          {transaction.description}
+                          {isRowBeingEdited && <span className="ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">Editing</span>}
+                        </td>
+                        <td className="py-3">
+                          <span className="bg-slate-950 px-2 py-0.5 rounded text-[11px] border border-slate-800">
+                            {transaction.category}
+                          </span>
+                        </td>
+                        <td className="py-3 text-slate-500">{transaction.date}</td>
+                        <td className={`py-3 text-right font-bold ${transaction.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                        </td>
+                        <td className="py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => handleEditSelect(transaction)} 
+                              className={`p-1 rounded transition-colors ${isRowBeingEdited ? 'text-amber-400 bg-amber-500/20' : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'}`}
+                              title="Edit transaction parameters"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteTransaction(transaction.id)} 
+                              className="text-slate-600 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition-colors"
+                              title="Delete ledger entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
